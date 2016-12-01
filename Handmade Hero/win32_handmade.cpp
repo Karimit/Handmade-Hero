@@ -45,7 +45,6 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	}break;
 	default:
 	{
-		//OutputDebugString("default");
 		result = DefWindowProc(window, message, wParam, lParam);
 	}break;
 	}
