@@ -59,6 +59,7 @@ int CALLBACK WinMain(
 )
 {
 	WNDCLASS windowClass = {}; //init all struct members to 0
+	//windowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = MainWindowCallback;//callback from windows when our window needs to do somwthing
 	windowClass.hInstance = hInstance;
 	windowClass.lpszClassName = "HandmadeHeroWindowClass";
