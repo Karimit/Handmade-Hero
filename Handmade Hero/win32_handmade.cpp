@@ -1,5 +1,11 @@
 #include "windows.h"
 
+#define internal static
+#define local_persist static
+#define global_variable static
+
+global_variable bool Running;
+
 LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 						, WPARAM wParam, LPARAM lParam)
 {
@@ -13,10 +19,12 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	case WM_DESTROY:
 	{
 		OutputDebugString("WM_DESTORY\n");
+		Running = false;
 	}break;
 	case WM_CLOSE:
 	{
 		OutputDebugString("WM_CLOSE\n");
+		Running = false;
 	}break;
 	case WM_ACTIVATEAPP:
 	{
@@ -30,7 +38,7 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 		int y = paint.rcPaint.top;
 		int width = paint.rcPaint.right - paint.rcPaint.left;
 		int height = paint.rcPaint.bottom - paint.rcPaint.top;
-		static DWORD op = WHITENESS; //dont try this at home
+		local_persist DWORD op = WHITENESS; //dont try this at home
 
 		if (op == WHITENESS)
 		{
@@ -72,7 +80,8 @@ int CALLBACK WinMain(
 		if (windowHandle)
 		{
 			MSG message;
-			for (;;)
+			Running = true;
+			while (Running)
 			{
 				BOOL messageResult = GetMessage(&message, 0 /*get messages from all windows belonging to us*/,
 					0, 0);
