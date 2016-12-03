@@ -6,38 +6,32 @@
 
 global_variable bool Running;
 
-//TODO: make them global vars
-BITMAPINFO BitmapInfo;
-void* BitmapMemory;
-HBITMAP BitmapHandle;
-HDC BitmapDeviceContext;
+global_variable BITMAPINFO BitmapInfo;
+global_variable void* BitmapMemory;
 
-//TODO: make it internal
-void Win32ResizeDIBSection(int width, int height)
+internal void Win32ResizeDIBSection(int width, int height)
 {
-	if (BitmapHandle)
+	if (BitmapMemory)
 	{
-		DeleteObject(BitmapHandle);
+		VirtualFree(BitmapMemory, 0, MEM_RELEASE);
 	}
-	if (!BitmapDeviceContext)
-	{
-		BitmapDeviceContext = CreateCompatibleDC(0);
-	}
+
 	BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
 	BitmapInfo.bmiHeader.biWidth = width;
 	BitmapInfo.bmiHeader.biHeight = height;
 	BitmapInfo.bmiHeader.biPlanes = 1;
-	BitmapInfo.bmiHeader.biBitCount = 32;
+	BitmapInfo.bmiHeader.biBitCount = 32; //RGB is just 24, but will ask for 32 for D-Word Alignment (cpu accesses memory at multiple of 4 easier :) )
 	BitmapInfo.bmiHeader.biCompression = BI_RGB;
 
-	BitmapHandle = CreateDIBSection(BitmapDeviceContext, &BitmapInfo, DIB_RGB_COLORS,
-		&BitmapMemory, 0, 0);
+	int bytesPerPixel = 4;
+	int	bitmapMemorySize = 4 * width * height;
+	BitmapMemory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 }
 
-//TODO: make it internal
-void Win32UpdateWindow(HDC deviceContext, int x, int y, int width, int height)
+internal void Win32UpdateWindow(HDC deviceContext, int x, int y, int width, int height)
 {
-	StretchDIBits(deviceContext, x, y, width, height, x, y, width, height, BitmapMemory,
+	StretchDIBits(deviceContext, x, y, width, height
+		, x, y, width, height, BitmapMemory,
 		&BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
 }
 
