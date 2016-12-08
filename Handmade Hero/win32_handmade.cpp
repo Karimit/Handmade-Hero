@@ -1,4 +1,10 @@
 #include "windows.h"
+#include "stdint.h"
+
+typedef uint8_t uint8;
+typedef uint8_t uint16;
+typedef uint32_t uint32;
+typedef uint32_t uint64;
 
 #define internal static
 #define local_persist static
@@ -8,6 +14,8 @@ global_variable bool Running;
 
 global_variable BITMAPINFO BitmapInfo;
 global_variable void* BitmapMemory;
+global_variable int BitmapWidth;
+global_variable int BitmapHeight;
 
 internal void Win32ResizeDIBSection(int width, int height)
 {
@@ -16,9 +24,14 @@ internal void Win32ResizeDIBSection(int width, int height)
 		VirtualFree(BitmapMemory, 0, MEM_RELEASE);
 	}
 
+	BitmapWidth = width;
+	BitmapHeight = height;
+
 	BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
-	BitmapInfo.bmiHeader.biWidth = width;
-	BitmapInfo.bmiHeader.biHeight = height;
+	BitmapInfo.bmiHeader.biWidth = BitmapWidth;
+	//Set the biHeight to negative BitmapHeight so the bitmap is considered a top-down DIB and its origin is the upper-left corner.
+	//See https://msdn.microsoft.com/en-us/library/windows/desktop/dd183376(v=vs.85).aspx
+	BitmapInfo.bmiHeader.biHeight = -BitmapHeight;
 	BitmapInfo.bmiHeader.biPlanes = 1;
 	BitmapInfo.bmiHeader.biBitCount = 32; //RGB is just 24, but will ask for 32 for D-Word Alignment (cpu accesses memory at multiple of 4 easier :) )
 	BitmapInfo.bmiHeader.biCompression = BI_RGB;
@@ -28,10 +41,15 @@ internal void Win32ResizeDIBSection(int width, int height)
 	BitmapMemory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 }
 
-internal void Win32UpdateWindow(HDC deviceContext, int x, int y, int width, int height)
+internal void Win32UpdateWindow(HDC deviceContext, RECT* windowRect, int x, int y, int width, int height)
 {
-	StretchDIBits(deviceContext, x, y, width, height
-		, x, y, width, height, BitmapMemory,
+	//passed a pointer to window rect because otherwise the whole window rect would have been unnecessarly passed on the stack.
+	int windowWidth = windowRect->right - windowRect->left;
+	int windowHeight = windowRect->bottom - windowRect->top;
+	StretchDIBits(deviceContext,
+		windowRect->left, windowRect->top, windowWidth, windowHeight //destination
+		, 0, 0, BitmapWidth, BitmapHeight, //source
+		BitmapMemory,
 		&BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
 }
 
@@ -72,7 +90,10 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 		int y = paint.rcPaint.top;
 		int width = paint.rcPaint.right - paint.rcPaint.left;
 		int height = paint.rcPaint.bottom - paint.rcPaint.top;
-		Win32UpdateWindow(deviceContext, x, y, width, height);
+
+		RECT windowRect;
+		GetClientRect(window, &windowRect);
+		Win32UpdateWindow(deviceContext, &windowRect, x, y, width, height);
 		EndPaint(window, &paint);
 	}break;
 	default:
