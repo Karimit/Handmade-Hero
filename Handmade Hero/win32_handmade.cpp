@@ -10,66 +10,88 @@ typedef uint32_t uint64;
 #define local_persist static
 #define global_variable static
 
-global_variable bool Running;
-
-global_variable int BitmapWidth;
-global_variable int BitmapHeight;
-global_variable BITMAPINFO BitmapInfo;
-global_variable void* BitmapMemory;
-global_variable int BytesPerPixel = 4;
-
-internal void DrawWieredGradient(int xOffset, int yOffset)
+struct Win32OffscreenBuffer
 {
-	uint32* pixel = (uint32*)BitmapMemory;
-	uint8* row = (uint8*)BitmapMemory;
-	int pitch = BitmapWidth * BytesPerPixel;
-	for (int y = 0; y < BitmapHeight; y++)
+	int Width;
+	int Height;
+	BITMAPINFO Info;
+	void* Memory;
+	int BytesPerPixel;
+	int Pitch;
+};
+
+global_variable bool Running;
+global_variable Win32OffscreenBuffer GlobalBackbuffer;
+
+struct Win32WindowDimension
+{
+	int Width;
+	int Height;
+};
+
+internal Win32WindowDimension Win32GetWindowDimension(HWND window)
+{
+	Win32WindowDimension result;
+	RECT clientRect;
+	GetClientRect(window, &clientRect);
+	result.Width = clientRect.right - clientRect.left;
+	result.Height = clientRect.bottom - clientRect.top;
+	return result;
+}
+
+internal void DrawWieredGradient(Win32OffscreenBuffer buffer, int xOffset, int yOffset)
+{
+	uint32* pixel = (uint32*)buffer.Memory;
+	uint8* row = (uint8*)buffer.Memory;
+	for (int y = 0; y < buffer.Height; y++)
 	{
 		pixel = (uint32*)row;
-		for (int x = 0; x < BitmapWidth; x++)
+		for (int x = 0; x < buffer.Width; x++)
 		{
 			uint8 blue = x + xOffset;
 			uint8 green = y + yOffset;
 			*pixel++ = (uint32)((green << 8) | blue);
 		}
-		row += pitch;
+		row += buffer.Pitch;
 	}
 }
 
-internal void Win32ResizeDIBSection(int width, int height)
+internal void Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int height)
 {
-	if (BitmapMemory)
+	if (buffer->Memory)
 	{
-		VirtualFree(BitmapMemory, 0, MEM_RELEASE);
+		VirtualFree(buffer->Memory, 0, MEM_RELEASE);
 	}
 
-	BitmapWidth = width;
-	BitmapHeight = height;
+	buffer->Width = width;
+	buffer->Height = height;
+	buffer->BytesPerPixel = 4;
 
-	BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
-	BitmapInfo.bmiHeader.biWidth = BitmapWidth;
+	buffer->Info.bmiHeader.biSize = sizeof(buffer->Info.bmiHeader);
+	buffer->Info.bmiHeader.biWidth = buffer->Width;
 	//Set the biHeight to negative BitmapHeight so the bitmap is considered a top-down DIB and its origin is the upper-left corner.
 	//See https://msdn.microsoft.com/en-us/library/windows/desktop/dd183376(v=vs.85).aspx
-	BitmapInfo.bmiHeader.biHeight = -BitmapHeight;
-	BitmapInfo.bmiHeader.biPlanes = 1;
-	BitmapInfo.bmiHeader.biBitCount = 32; //RGB is just 24, but will ask for 32 for D-Word Alignment (cpu accesses memory at multiple of 4 easier :) )
-	BitmapInfo.bmiHeader.biCompression = BI_RGB;
+	buffer->Info.bmiHeader.biHeight = -buffer->Height;
+	buffer->Info.bmiHeader.biPlanes = 1;
+	buffer->Info.bmiHeader.biBitCount = 32; //RGB is just 24, but will ask for 32 for D-Word Alignment (cpu accesses memory at multiple of 4 easier :) )
+	buffer->Info.bmiHeader.biCompression = BI_RGB;
 
-	int	bitmapMemorySize = BytesPerPixel * BitmapWidth * BitmapHeight;
-	BitmapMemory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-	DrawWieredGradient(0, 0);
+	int	bitmapMemorySize = buffer->BytesPerPixel * buffer->Width * buffer->Height;
+	buffer->Memory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+	buffer->Pitch = buffer->Width * buffer->BytesPerPixel;
+	DrawWieredGradient(*buffer, 0, 0);
 }
 
-internal void Win32UpdateWindow(HDC deviceContext, RECT* clientRect, int x, int y, int width, int height)
+internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer buffer,
+					int windowWidth, int windowHeight, int width, int height)
 {
-	//passed a pointer to window rect because otherwise the whole window rect would have been unnecessarly passed on the stack.
-	int windowWidth = clientRect->right - clientRect->left;
-	int windowHeight = clientRect->bottom - clientRect->top;
+	//Passed the whole rect and not a pointer to it. Maybe more efficent as this function is small and might be inlined anyway
+	// and the compiler will use the same Rect that is already on the stack.
 	StretchDIBits(deviceContext,
-		clientRect->left, clientRect->top, windowWidth, windowHeight //destination
-		, 0, 0, BitmapWidth, BitmapHeight, //source
-		BitmapMemory,
-		&BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
+		0, 0, windowWidth, windowHeight //destination
+		, 0, 0, buffer.Width, buffer.Height, //source
+		buffer.Memory,
+		&(buffer.Info), DIB_RGB_COLORS, SRCCOPY);
 }
 
 LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
@@ -80,11 +102,8 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	{
 	case WM_SIZE:
 	{
-		RECT clientRect;
-		GetClientRect(window, &clientRect);
-		int width = clientRect.right - clientRect.left;
-		int height = clientRect.bottom - clientRect.top;
-		Win32ResizeDIBSection(width, height);
+		Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
+		Win32ResizeDIBSection(&GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 		OutputDebugString("WM_SIZE\n");
 	}break;
 	case WM_DESTROY:
@@ -110,9 +129,8 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 		int width = paint.rcPaint.right - paint.rcPaint.left;
 		int height = paint.rcPaint.bottom - paint.rcPaint.top;
 
-		RECT clientRect;
-		GetClientRect(window, &clientRect);
-		Win32UpdateWindow(deviceContext, &clientRect, x, y, width, height);
+		Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
+		Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height, width, height);
 		EndPaint(window, &paint);
 	}break;
 	default:
@@ -131,23 +149,26 @@ int CALLBACK WinMain(
 )
 {
 	WNDCLASS windowClass = {}; //init all struct members to 0
-	//windowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+	windowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = MainWindowCallback;//callback from windows when our window needs to do somwthing
 	windowClass.hInstance = hInstance;
 	windowClass.lpszClassName = "HandmadeHeroWindowClass";
 
 	if (RegisterClass(&windowClass))
 	{
-		HWND windowHandle = CreateWindowEx(0, windowClass.lpszClassName, "Handmade Hero",
+		HWND window = CreateWindowEx(0, windowClass.lpszClassName, "Handmade Hero",
 			WS_OVERLAPPEDWINDOW|WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
 			CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, hInstance, 0);
-		if (windowHandle)
+		if (window)
 		{
-			MSG message;
 			Running = true;
 			int xOffset = 0;
 			while (Running)
 			{
+				MSG message; //define it inside the loop, it will not make any difference to the compiler 
+							 // + u get the benefit of not beign able to mistakenly reference it outside the loop.
+							 //Unless of course the type is a class that has a destructor that u dont want to be called at
+							 // every iteration.
 				while (PeekMessage(&message, 0, 0, 0, PM_REMOVE))
 				{
 					if (message.message == WM_QUIT)
@@ -155,14 +176,13 @@ int CALLBACK WinMain(
 					TranslateMessage(&message);
 					DispatchMessage(&message);
 				}
-				DrawWieredGradient(xOffset, 0);
-				HDC deviceContext = GetDC(windowHandle);
-				RECT clientRect;
-				GetClientRect(windowHandle, &clientRect);
-				Win32UpdateWindow(deviceContext, &clientRect, 0, 0, 0, 0);
+				DrawWieredGradient(GlobalBackbuffer, xOffset, 0);
+				HDC deviceContext = GetDC(window);
+				Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
+				Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height, 0, 0);
 				xOffset++;
 				//I added this. Memory use keeps going up without releasing the DC.
-				ReleaseDC(windowHandle, deviceContext);
+				ReleaseDC(window, deviceContext);
 			}
 		}
 		else
