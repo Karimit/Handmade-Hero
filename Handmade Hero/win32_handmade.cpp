@@ -12,10 +12,29 @@ typedef uint32_t uint64;
 
 global_variable bool Running;
 
-global_variable BITMAPINFO BitmapInfo;
-global_variable void* BitmapMemory;
 global_variable int BitmapWidth;
 global_variable int BitmapHeight;
+global_variable BITMAPINFO BitmapInfo;
+global_variable void* BitmapMemory;
+global_variable int BytesPerPixel = 4;
+
+internal void DrawWieredGradient(int xOffset, int yOffset)
+{
+	uint32* pixel = (uint32*)BitmapMemory;
+	uint8* row = (uint8*)BitmapMemory;
+	int pitch = BitmapWidth * BytesPerPixel;
+	for (int y = 0; y < BitmapHeight; y++)
+	{
+		pixel = (uint32*)row;
+		for (int x = 0; x < BitmapWidth; x++)
+		{
+			uint8 blue = x + xOffset;
+			uint8 green = y + yOffset;
+			*pixel++ = (uint32)((green << 8) | blue);
+		}
+		row += pitch;
+	}
+}
 
 internal void Win32ResizeDIBSection(int width, int height)
 {
@@ -36,18 +55,18 @@ internal void Win32ResizeDIBSection(int width, int height)
 	BitmapInfo.bmiHeader.biBitCount = 32; //RGB is just 24, but will ask for 32 for D-Word Alignment (cpu accesses memory at multiple of 4 easier :) )
 	BitmapInfo.bmiHeader.biCompression = BI_RGB;
 
-	int bytesPerPixel = 4;
-	int	bitmapMemorySize = 4 * width * height;
-	BitmapMemory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+	int	bitmapMemorySize = BytesPerPixel * BitmapWidth * BitmapHeight;
+	BitmapMemory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+	DrawWieredGradient(0, 0);
 }
 
-internal void Win32UpdateWindow(HDC deviceContext, RECT* windowRect, int x, int y, int width, int height)
+internal void Win32UpdateWindow(HDC deviceContext, RECT* clientRect, int x, int y, int width, int height)
 {
 	//passed a pointer to window rect because otherwise the whole window rect would have been unnecessarly passed on the stack.
-	int windowWidth = windowRect->right - windowRect->left;
-	int windowHeight = windowRect->bottom - windowRect->top;
+	int windowWidth = clientRect->right - clientRect->left;
+	int windowHeight = clientRect->bottom - clientRect->top;
 	StretchDIBits(deviceContext,
-		windowRect->left, windowRect->top, windowWidth, windowHeight //destination
+		clientRect->left, clientRect->top, windowWidth, windowHeight //destination
 		, 0, 0, BitmapWidth, BitmapHeight, //source
 		BitmapMemory,
 		&BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
@@ -91,9 +110,9 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 		int width = paint.rcPaint.right - paint.rcPaint.left;
 		int height = paint.rcPaint.bottom - paint.rcPaint.top;
 
-		RECT windowRect;
-		GetClientRect(window, &windowRect);
-		Win32UpdateWindow(deviceContext, &windowRect, x, y, width, height);
+		RECT clientRect;
+		GetClientRect(window, &clientRect);
+		Win32UpdateWindow(deviceContext, &clientRect, x, y, width, height);
 		EndPaint(window, &paint);
 	}break;
 	default:
@@ -126,19 +145,24 @@ int CALLBACK WinMain(
 		{
 			MSG message;
 			Running = true;
+			int xOffset = 0;
 			while (Running)
 			{
-				BOOL messageResult = GetMessage(&message, 0 /*get messages from all windows belonging to us*/,
-					0, 0);
-				if (messageResult > 0)
+				while (PeekMessage(&message, 0, 0, 0, PM_REMOVE))
 				{
+					if (message.message == WM_QUIT)
+						Running = false;
 					TranslateMessage(&message);
 					DispatchMessage(&message);
 				}
-				else
-				{
-					break;
-				}
+				DrawWieredGradient(xOffset, 0);
+				HDC deviceContext = GetDC(windowHandle);
+				RECT clientRect;
+				GetClientRect(windowHandle, &clientRect);
+				Win32UpdateWindow(deviceContext, &clientRect, 0, 0, 0, 0);
+				xOffset++;
+				//I added this. Memory use keeps going up without releasing the DC.
+				ReleaseDC(windowHandle, deviceContext);
 			}
 		}
 		else
