@@ -16,11 +16,10 @@ struct Win32OffscreenBuffer
 	int Height;
 	BITMAPINFO Info;
 	void* Memory;
-	int BytesPerPixel;
 	int Pitch;
 };
 
-global_variable bool Running;
+global_variable bool GlobalRunning;
 global_variable Win32OffscreenBuffer GlobalBackbuffer;
 
 struct Win32WindowDimension
@@ -65,7 +64,6 @@ internal void Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int
 
 	buffer->Width = width;
 	buffer->Height = height;
-	buffer->BytesPerPixel = 4;
 
 	buffer->Info.bmiHeader.biSize = sizeof(buffer->Info.bmiHeader);
 	buffer->Info.bmiHeader.biWidth = buffer->Width;
@@ -76,14 +74,14 @@ internal void Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int
 	buffer->Info.bmiHeader.biBitCount = 32; //RGB is just 24, but will ask for 32 for D-Word Alignment (cpu accesses memory at multiple of 4 easier :) )
 	buffer->Info.bmiHeader.biCompression = BI_RGB;
 
-	int	bitmapMemorySize = buffer->BytesPerPixel * buffer->Width * buffer->Height;
+	int bytesPerPixel = 4;
+	int	bitmapMemorySize = bytesPerPixel * buffer->Width * buffer->Height;
 	buffer->Memory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-	buffer->Pitch = buffer->Width * buffer->BytesPerPixel;
+	buffer->Pitch = buffer->Width * bytesPerPixel;
 	DrawWieredGradient(*buffer, 0, 0);
 }
 
-internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer buffer,
-					int windowWidth, int windowHeight, int width, int height)
+internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer buffer, int windowWidth, int windowHeight)
 {
 	//Passed the whole rect and not a pointer to it. Maybe more efficent as this function is small and might be inlined anyway
 	// and the compiler will use the same Rect that is already on the stack.
@@ -102,19 +100,16 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	{
 	case WM_SIZE:
 	{
-		Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
-		Win32ResizeDIBSection(&GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
-		OutputDebugString("WM_SIZE\n");
 	}break;
 	case WM_DESTROY:
 	{
 		OutputDebugString("WM_DESTORY\n");
-		Running = false;
+		GlobalRunning = false;
 	}break;
 	case WM_CLOSE:
 	{
 		OutputDebugString("WM_CLOSE\n");
-		Running = false;
+		GlobalRunning = false;
 	}break;
 	case WM_ACTIVATEAPP:
 	{
@@ -124,13 +119,8 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	{
 		PAINTSTRUCT paint;
 		HDC deviceContext = BeginPaint(window, &paint);
-		int x = paint.rcPaint.left;
-		int y = paint.rcPaint.top;
-		int width = paint.rcPaint.right - paint.rcPaint.left;
-		int height = paint.rcPaint.bottom - paint.rcPaint.top;
-
 		Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
-		Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height, width, height);
+		Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 		EndPaint(window, &paint);
 	}break;
 	default:
@@ -148,6 +138,8 @@ int CALLBACK WinMain(
 	int       nCmdShow
 )
 {
+	Win32ResizeDIBSection(&GlobalBackbuffer, 1280, 720);
+
 	WNDCLASS windowClass = {}; //init all struct members to 0
 	windowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = MainWindowCallback;//callback from windows when our window needs to do somwthing
@@ -161,9 +153,10 @@ int CALLBACK WinMain(
 			CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, hInstance, 0);
 		if (window)
 		{
-			Running = true;
+			GlobalRunning = true;
+			HDC deviceContext = GetDC(window);
 			int xOffset = 0;
-			while (Running)
+			while (GlobalRunning)
 			{
 				MSG message; //define it inside the loop, it will not make any difference to the compiler 
 							 // + u get the benefit of not beign able to mistakenly reference it outside the loop.
@@ -172,18 +165,17 @@ int CALLBACK WinMain(
 				while (PeekMessage(&message, 0, 0, 0, PM_REMOVE))
 				{
 					if (message.message == WM_QUIT)
-						Running = false;
+						GlobalRunning = false;
 					TranslateMessage(&message);
 					DispatchMessage(&message);
 				}
 				DrawWieredGradient(GlobalBackbuffer, xOffset, 0);
-				HDC deviceContext = GetDC(window);
 				Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
-				Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height, 0, 0);
+				Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 				xOffset++;
-				//I added this. Memory use keeps going up without releasing the DC.
-				ReleaseDC(window, deviceContext);
 			}
+			//We specified CS_OWNDC => we are telling windows that we want our own DC that we wont have to return to DC pool
+			// => there is no need to Release it.
 		}
 		else
 		{
