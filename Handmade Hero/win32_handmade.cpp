@@ -1,9 +1,13 @@
 #include "windows.h"
 #include "stdint.h"
+#include "xinput.h"
 
 typedef uint8_t uint8;
 typedef uint8_t uint16;
+typedef int16_t int16;
 typedef uint32_t uint32;
+typedef int32_t int32;
+typedef int32 bool32;
 typedef uint32_t uint64;
 
 #define internal static
@@ -27,6 +31,53 @@ struct Win32WindowDimension
 	int Width;
 	int Height;
 };
+
+//Support for xInputGetState and xInputSetState without having to reference xinput.dll because
+// many windows installations (especially win 7) doesnt have it by default
+//We are creating a function pointer to point to xInputGetState and xInputSetState, and having
+// these func pointers point to a stub func in case xinput1_4.dll doesnt exist and using the
+// game pad is not possible. Otherwise, if we actually referenced that lib and it didnt exist,
+// then the game will crash even though want the user t be able to play using the keyboard.
+#define X_INPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE* pState)
+typedef X_INPUT_GET_STATE(X_Input_Get_State);
+#define XInputGetState XInputGetState_ //to not collide with the original XInputGetState in xinput.dll, this way when we refer to XInputGetState
+									   // we are referencing our own XInputGetState_
+
+X_INPUT_GET_STATE(XInputGetStateStub)
+{
+	return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+global_variable X_Input_Get_State* XInputGetState_ = XInputGetStateStub;
+
+#define X_INPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION* pVibration)
+typedef X_INPUT_SET_STATE(X_Input_Set_State);
+#define XInputSetState XInputSetState_
+
+X_INPUT_SET_STATE(XInputSetStateStub)
+{
+	return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+global_variable X_Input_Set_State* XInputSetState_ = XInputSetStateStub;
+
+internal void Win32LoadXInput()
+{
+	HMODULE xInputLibrary = LoadLibraryA("xinput1_4.dll");
+	if (!xInputLibrary)
+	{
+		HMODULE xInputLibrary = LoadLibraryA("xinput1_3.dll");
+	}
+	if (xInputLibrary)
+	{
+		XInputGetState = (X_Input_Get_State*) GetProcAddress(xInputLibrary, "XInputGetState");
+		if (!XInputGetState)
+			XInputGetState = XInputGetStateStub;
+		XInputSetState = (X_Input_Set_State*) GetProcAddress(xInputLibrary, "XInputSetState");
+		if (!XInputSetState)
+			XInputSetState = XInputSetStateStub;
+	}
+}
 
 internal Win32WindowDimension Win32GetWindowDimension(HWND window)
 {
@@ -88,8 +139,7 @@ internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer
 	StretchDIBits(deviceContext,
 		0, 0, windowWidth, windowHeight //destination
 		, 0, 0, buffer.Width, buffer.Height, //source
-		buffer.Memory,
-		&(buffer.Info), DIB_RGB_COLORS, SRCCOPY);
+		buffer.Memory,	&(buffer.Info), DIB_RGB_COLORS, SRCCOPY);
 }
 
 LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
@@ -105,6 +155,81 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	{
 		OutputDebugString("WM_DESTORY\n");
 		GlobalRunning = false;
+	}break;
+	case WM_SYSKEYUP:
+	case WM_SYSKEYDOWN:
+	case WM_KEYUP:
+	case WM_KEYDOWN:
+	{
+		WPARAM vkCode = wParam;
+		bool wasDown = ((lParam & (1 << 30)) != 0);
+		bool isDown = ((lParam & (1 << 31)) == 0);
+		if (wasDown != isDown)
+		{
+			if (vkCode == VK_F4)
+			{
+				bool altDown = ((1 << 29) & lParam) != 0;
+				if (altDown)
+					GlobalRunning = false;
+			}
+			else if (vkCode == 'A')
+			{
+
+			}
+			else if (vkCode == 'S')
+			{
+
+			}
+			else if (vkCode == 'D')
+			{
+
+			}
+			else if (vkCode == 'Q')
+			{
+
+			}
+			else if (vkCode == 'W')
+			{
+
+			}
+			else if (vkCode == 'E')
+			{
+
+			}
+			else if (vkCode == VK_UP)
+			{
+
+			}
+			else if (vkCode == VK_DOWN)
+			{
+
+			}
+			else if (vkCode == VK_LEFT)
+			{
+
+			}
+			else if (vkCode == VK_RIGHT)
+			{
+
+			}
+			else if (vkCode == VK_ESCAPE)
+			{
+				OutputDebugString("ESC: ");
+				if (isDown)
+				{
+					OutputDebugString("IsDown");
+				}
+				if (wasDown)
+				{
+					OutputDebugString("WasDown");
+				}
+				OutputDebugString("\n");
+			}
+			else if (vkCode == VK_SPACE)
+			{
+
+			}
+		}
 	}break;
 	case WM_CLOSE:
 	{
@@ -138,6 +263,7 @@ int CALLBACK WinMain(
 	int       nCmdShow
 )
 {
+	Win32LoadXInput();
 	Win32ResizeDIBSection(&GlobalBackbuffer, 1280, 720);
 
 	WNDCLASS windowClass = {}; //init all struct members to 0
@@ -169,6 +295,37 @@ int CALLBACK WinMain(
 					TranslateMessage(&message);
 					DispatchMessage(&message);
 				}
+
+				//polling for controller input
+				for (DWORD controllerIndex = 0; controllerIndex < XUSER_MAX_COUNT; controllerIndex++)
+				{
+					XINPUT_STATE controllerState;
+					if (XInputGetState(controllerIndex, &controllerState) == ERROR_SUCCESS)
+					{
+						//ERROR_SUCCESS: controller is plugged in
+						XINPUT_GAMEPAD *pad = &controllerState.Gamepad;
+						bool32 up = XINPUT_GAMEPAD_DPAD_UP & pad->wButtons;
+						bool32 down = XINPUT_GAMEPAD_DPAD_DOWN & pad->wButtons;
+						bool32 left = XINPUT_GAMEPAD_DPAD_LEFT & pad->wButtons;
+						bool32 right = XINPUT_GAMEPAD_DPAD_RIGHT & pad->wButtons;
+						bool32 start = XINPUT_GAMEPAD_START & pad->wButtons;
+						bool32 back = XINPUT_GAMEPAD_BACK & pad->wButtons;
+						bool32 rightShoulder = XINPUT_GAMEPAD_RIGHT_SHOULDER & pad->wButtons;
+						bool32 leftTShoulder = XINPUT_GAMEPAD_LEFT_SHOULDER & pad->wButtons;
+						bool32 aButton = XINPUT_GAMEPAD_A & pad->wButtons;
+						bool32 bButton = XINPUT_GAMEPAD_B & pad->wButtons;
+						bool32 xButton = XINPUT_GAMEPAD_X & pad->wButtons;
+						bool32 yButton = XINPUT_GAMEPAD_Y & pad->wButtons;
+
+						int16 stickX = pad->sThumbLX;
+						int16 stickY = pad->sThumbLY;
+					}
+					else
+					{
+
+					}
+				}
+
 				DrawWieredGradient(GlobalBackbuffer, xOffset, 0);
 				Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
 				Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
