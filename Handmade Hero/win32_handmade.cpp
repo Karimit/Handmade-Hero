@@ -89,20 +89,20 @@ internal Win32WindowDimension Win32GetWindowDimension(HWND window)
 	return result;
 }
 
-internal void DrawWieredGradient(Win32OffscreenBuffer buffer, int xOffset, int yOffset)
+internal void DrawWieredGradient(Win32OffscreenBuffer* buffer, int xOffset, int yOffset)
 {
-	uint32* pixel = (uint32*)buffer.Memory;
-	uint8* row = (uint8*)buffer.Memory;
-	for (int y = 0; y < buffer.Height; y++)
+	uint32* pixel = (uint32*)buffer->Memory;
+	uint8* row = (uint8*)buffer->Memory;
+	for (int y = 0; y < buffer->Height; y++)
 	{
 		pixel = (uint32*)row;
-		for (int x = 0; x < buffer.Width; x++)
+		for (int x = 0; x < buffer->Width; x++)
 		{
 			uint8 blue = x + xOffset;
 			uint8 green = y + yOffset;
 			*pixel++ = (uint32)((green << 8) | blue);
 		}
-		row += buffer.Pitch;
+		row += buffer->Pitch;
 	}
 }
 
@@ -129,17 +129,15 @@ internal void Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int
 	int	bitmapMemorySize = bytesPerPixel * buffer->Width * buffer->Height;
 	buffer->Memory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 	buffer->Pitch = buffer->Width * bytesPerPixel;
-	DrawWieredGradient(*buffer, 0, 0);
+	DrawWieredGradient(buffer, 0, 0);
 }
 
-internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer buffer, int windowWidth, int windowHeight)
+internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer* buffer, int windowWidth, int windowHeight)
 {
-	//Passed the whole rect and not a pointer to it. Maybe more efficent as this function is small and might be inlined anyway
-	// and the compiler will use the same Rect that is already on the stack.
 	StretchDIBits(deviceContext,
 		0, 0, windowWidth, windowHeight //destination
-		, 0, 0, buffer.Width, buffer.Height, //source
-		buffer.Memory,	&(buffer.Info), DIB_RGB_COLORS, SRCCOPY);
+		, 0, 0, buffer->Width, buffer->Height, //source
+		buffer->Memory,	&(buffer->Info), DIB_RGB_COLORS, SRCCOPY);
 }
 
 LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
@@ -245,7 +243,7 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 		PAINTSTRUCT paint;
 		HDC deviceContext = BeginPaint(window, &paint);
 		Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
-		Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
+		Win32DisplayBufferInWindow(deviceContext, &GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 		EndPaint(window, &paint);
 	}break;
 	default:
@@ -326,9 +324,9 @@ int CALLBACK WinMain(
 					}
 				}
 
-				DrawWieredGradient(GlobalBackbuffer, xOffset, 0);
+				DrawWieredGradient(&GlobalBackbuffer, xOffset, 0);
 				Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
-				Win32DisplayBufferInWindow(deviceContext, GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
+				Win32DisplayBufferInWindow(deviceContext, &GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 				xOffset++;
 			}
 			//We specified CS_OWNDC => we are telling windows that we want our own DC that we wont have to return to DC pool
