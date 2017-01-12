@@ -96,6 +96,10 @@ internal void Win32LoadXInput()
 	HMODULE xInputLibrary = LoadLibraryA("xinput1_4.dll");
 	if (!xInputLibrary)
 	{
+		HMODULE xInputLibrary = LoadLibraryA("xinput9_1_0.dll");
+	}
+	if (!xInputLibrary)
+	{
 		HMODULE xInputLibrary = LoadLibraryA("xinput1_3.dll");
 	}
 	if (xInputLibrary)
