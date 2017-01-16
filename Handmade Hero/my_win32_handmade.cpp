@@ -3,7 +3,6 @@
 #include "xinput.h"
 #include "dsound.h"
 #include "math.h"
-#include "stdio.h"
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -398,14 +397,11 @@ int CALLBACK WinMain(
 	int       nCmdShow
 )
 {
-	LARGE_INTEGER perfFrequencyResult;
-	QueryPerformanceFrequency(&perfFrequencyResult);
-	int64 perfCountFrequency = perfFrequencyResult.QuadPart;
-
 	Win32LoadXInput();
 	Win32ResizeDIBSection(&GlobalBackbuffer, 1280, 720);
 
 	WNDCLASS windowClass = {}; //init all struct members to 0
+	// TODO: 
 	windowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = MainWindowCallback;//callback from windows when our window needs to do somwthing
 	windowClass.hInstance = hInstance;
@@ -434,11 +430,6 @@ int CALLBACK WinMain(
 			int xOffset = 0;
 
 			GlobalRunning = true;
-
-			LARGE_INTEGER lastCounter;
-			QueryPerformanceCounter(&lastCounter);
-
-			uint64 lastCycleCount = __rdtsc();
 			while (GlobalRunning)
 			{
 				MSG message; //define it inside the loop, it will not make any difference to the compiler 
@@ -508,25 +499,6 @@ int CALLBACK WinMain(
 
 					Win32FillSoundBuffer(&GlobalSoundOutput, byteToLock, bytesToWrite);
 				}
-
-				uint64 endCycleCount = __rdtsc();
-				int64 cyclesElapsed = endCycleCount - lastCycleCount;
-
-				LARGE_INTEGER endCounter;
-				QueryPerformanceCounter(&endCounter);
-
-				int64 counterElapsed = endCounter.QuadPart - lastCounter.QuadPart;
-				real32 msPerFrame = ((1000.f * (real32)counterElapsed) / (real32)perfCountFrequency);
-				real32 fps = (real32) perfCountFrequency / counterElapsed;
-				real32 megaCyclesPerFrame = (real32) (cyclesElapsed / (1000 * 1000));
-
-				char buffer[256];
-				sprintf_s(buffer, "%fmsf, %ffps, %fmcpf\n",
-								 msPerFrame, fps, megaCyclesPerFrame);
-				OutputDebugString(buffer);
-
-				lastCounter = endCounter;
-				lastCycleCount = endCycleCount;
 			}
 			//We specified CS_OWNDC => we are telling windows that we want our own DC that we wont have to return to DC pool
 			// => there is no need to Release it.
