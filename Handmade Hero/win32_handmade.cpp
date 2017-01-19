@@ -1,29 +1,32 @@
+// TODO: THIS IS NOT A FINAL PLATFORM LAYER!!
+/**
+ *   - Saved game locations
+ *   - Getting a handle to our own executable file
+ *   - Asset loading path
+ *   - Threading (launch a thread)
+ *   - Raw Input (support for multiple keyboards)
+ *   - Sleep/timeBeginPeriod
+ *   - ClipCursor() (multimonitor support)
+ *   - Fullscreen support
+ *   - WM_SETCURSOR (control cursor visibility)
+ *   - QueryCanelAutoplay
+ *   - WM_ACTIVATEAPP (for when we are not active application)
+ *   - Blit speed improvemetns (BitBlt)
+ *   - Hardware acceleration (OpenGL or Direct3D or BOTH??)
+ *   - GetKeyboardLayout (for French keybords, international WASD support)
+ *
+ *   Just a partial list of stuff!!
+ */
 #include "windows.h"
-#include "stdint.h"
 #include "xinput.h"
 #include "dsound.h"
 #include "math.h"
 #include "stdio.h"
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef float real32;
-typedef double real64;
-
-#define internal static
-#define local_persist static
-#define global_variable static
+#include "util.h"
 
 #define PI32 3.14159265359f
+
+#include "handmade.h"
 
 struct Win32OffscreenBuffer
 {
@@ -186,23 +189,6 @@ internal Win32WindowDimension Win32GetWindowDimension(HWND window)
 	return result;
 }
 
-internal void DrawWeirdGradient(Win32OffscreenBuffer* buffer, int xOffset, int yOffset)
-{
-	uint32* pixel = (uint32*)buffer->Memory;
-	uint8* row = (uint8*)buffer->Memory;
-	for (int y = 0; y < buffer->Height; y++)
-	{
-		pixel = (uint32*)row;
-		for (int x = 0; x < buffer->Width; x++)
-		{
-			uint8 blue = x + xOffset;
-			uint8 green = y + yOffset;
-			*pixel++ = (uint32)((green << 8) | blue);
-		}
-		row += buffer->Pitch;
-	}
-}
-
 internal void Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int height)
 {
 	if (buffer->Memory)
@@ -226,7 +212,6 @@ internal void Win32ResizeDIBSection(Win32OffscreenBuffer *buffer, int width, int
 	int	bitmapMemorySize = bytesPerPixel * buffer->Width * buffer->Height;
 	buffer->Memory = VirtualAlloc(NULL, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 	buffer->Pitch = buffer->Width * bytesPerPixel;
-	DrawWeirdGradient(buffer, 0, 0);
 }
 
 internal void Win32DisplayBufferInWindow(HDC deviceContext, Win32OffscreenBuffer* buffer, int windowWidth, int windowHeight)
@@ -482,7 +467,14 @@ int CALLBACK WinMain(
 
 					}
 				}
-				DrawWeirdGradient(&GlobalBackbuffer, xOffset, 0);
+
+				GameOffscreenBuffer buffer = {};
+				buffer.Memory = GlobalBackbuffer.Memory;
+				buffer.Width = GlobalBackbuffer.Width;
+				buffer.Height = GlobalBackbuffer.Height;
+				buffer.Pitch = GlobalBackbuffer.Pitch;
+				GameUpdateAndRender(&buffer, xOffset, 0);
+
 				Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
 				Win32DisplayBufferInWindow(deviceContext, &GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 				xOffset++;
@@ -520,10 +512,13 @@ int CALLBACK WinMain(
 				real32 fps = (real32) perfCountFrequency / counterElapsed;
 				real32 megaCyclesPerFrame = (real32) (cyclesElapsed / (1000 * 1000));
 
+#if 0
 				char buffer[256];
 				sprintf_s(buffer, "%fmsf, %ffps, %fmcpf\n",
 								 msPerFrame, fps, megaCyclesPerFrame);
 				OutputDebugString(buffer);
+#endif // 0
+
 
 				lastCounter = endCounter;
 				lastCycleCount = endCycleCount;
