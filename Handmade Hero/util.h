@@ -1,5 +1,6 @@
 #pragma once
 #include "stdint.h"
+#include "math.h"
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -18,3 +19,5 @@ typedef double real64;
 #define internal static
 #define local_persist static
 #define global_variable static
+
+#define PI32 3.14159265359f
