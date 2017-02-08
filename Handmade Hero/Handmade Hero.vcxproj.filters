@@ -29,5 +29,8 @@
     <ClInclude Include="util.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="win32_handmade.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

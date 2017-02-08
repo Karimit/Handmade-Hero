@@ -21,3 +21,5 @@ typedef double real64;
 #define global_variable static
 
 #define PI32 3.14159265359f
+
+#define ArrayCount(array) (sizeof(array) / sizeof((array)[0]))
