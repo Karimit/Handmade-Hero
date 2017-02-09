@@ -34,19 +34,23 @@ internal void GameOutputSound (GameSoundOutputBuffer* soundBuffer, int toneHz)
 	}
 }
 
-void GameUpdateAndRender(GameOffscreenBuffer* buffer, GameSoundOutputBuffer* soundBuffer,
+void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSoundOutputBuffer* soundBuffer,
 						 GameInput* input)
 {
-	local_persist int xOffset = 0;
-	local_persist int yOffset = 0;
-	local_persist int toneHz = 256;
+	GameState* gameState = (GameState*)memory->PermenantStorage;
+	Assert(sizeof(gameState) <= memory->PermenantStorageSize);
+	if (!memory->IsInitialized)
+	{
+		gameState->ToneHz = 256;
 
+		memory->IsInitialized = true;
+	}
 	GameControllerInput input0 = input->Controllers[0];
 	if (input0.IsAnalog)
 	{
 		//use analog movement tuning
-		yOffset += (int)4.0f*(input0.EndX);
-		toneHz += 256 + (int)(128.0f*(input0.EndY));
+		gameState->YOffset += (int)4.0f*(input0.EndX);
+		gameState->ToneHz += 256 + (int)(128.0f*(input0.EndY));
 	}
 	else
 	{
@@ -54,9 +58,9 @@ void GameUpdateAndRender(GameOffscreenBuffer* buffer, GameSoundOutputBuffer* sou
 	}
 	if (input0.Down.EnddedDown)
 	{
-		xOffset++;
+		gameState->XOffset++;
 	}	
 
-	GameOutputSound(soundBuffer, toneHz);
-	DrawWeirdGradient(buffer, xOffset, yOffset);
+	GameOutputSound(soundBuffer, gameState->ToneHz);
+	DrawWeirdGradient(buffer, gameState->XOffset, gameState->YOffset);
 }
