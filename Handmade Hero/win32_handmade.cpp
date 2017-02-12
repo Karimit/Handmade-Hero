@@ -82,6 +82,67 @@ internal void Win32LoadXInput()
 	}
 }
 
+DebugReadFileResult DEBUGPlatformReadEntireFile(char* fileName)
+{
+	DebugReadFileResult result = {};
+	HANDLE fileHandle = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+	if (fileHandle != INVALID_HANDLE_VALUE)
+	{
+		LARGE_INTEGER fileSize;
+		if (GetFileSizeEx(fileHandle, &fileSize))
+		{
+			//We are neve going to read a file bigger than 4gigs.
+			uint32 fileSize32 = SafeTruncateUInt64(fileSize.QuadPart);
+			result.Content = VirtualAlloc(0, fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+			if (result.Content)
+			{
+				DWORD bytesRead;
+				if (ReadFile(fileHandle, result.Content, fileSize32, &bytesRead, 0) 
+					&& fileSize32 == bytesRead)
+				{
+					result.ContentSize = fileSize32;
+				}
+				else
+				{
+					DEBUGPlatformFreeFileMemory(result.Content);
+					result.Content = 0;
+				}
+			}
+		}
+		CloseHandle(fileHandle);
+	}
+	return result;
+}
+
+void DEBUGPlatformFreeFileMemory(void* memory)
+{
+	VirtualFree(memory, 0, MEM_RELEASE);
+}
+
+bool32 DEBUGPlatformWriteFile(char* fileName, void* memory, uint32 memorySize)
+{
+	bool32 result = false;
+	HANDLE fileHandle = CreateFile(fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+	if (fileHandle != INVALID_HANDLE_VALUE)
+	{
+		DWORD bytesWritten;
+		if (WriteFile(fileHandle, memory, memorySize, &bytesWritten, 0))
+		{
+			result = bytesWritten == memorySize;
+		}
+		else
+		{
+					
+		}
+		CloseHandle(fileHandle);
+	}
+	else
+	{
+
+	}
+	return result;
+}
+
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(_In_opt_ LPCGUID pcGuidDevice, _Outptr_ LPDIRECTSOUND* ppDS, _Pre_null_ LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(Direct_Sound_Create);
 

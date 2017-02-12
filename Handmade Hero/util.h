@@ -40,3 +40,9 @@ typedef double real64;
 #define Megabytes(value) (Kilobytes(value)*1024LL)
 #define Gigabytes(value) (Megabytes(value)*1024LL)
 #define Terabytes(value) (Gigabytes(value)*1024LL)
+
+inline uint32 SafeTruncateUInt64(uint64 value)
+{
+	Assert(value < 0xFFFFFFFF);
+	return (uint32)value;
+}

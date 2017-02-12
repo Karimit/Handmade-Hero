@@ -1,6 +1,21 @@
 #pragma once
-// Services that the game privde to the platform layer.
 #include "util.h"
+
+// Services that the platform layer provides to the game.
+#if HANDMADE_INTERNAL
+struct DebugReadFileResult
+{
+	uint32 ContentSize;
+	void* Content;
+};
+DebugReadFileResult DEBUGPlatformReadEntireFile(char* fileName);
+void DEBUGPlatformFreeFileMemory(void* memory);
+
+bool32 DEBUGPlatformWriteFile(char* fileName, void* memory, uint32 fileSize);
+#endif // HANDMADE_INTERNAL
+
+
+// Services that the game provides to the platform layer.
 
 struct GameOffscreenBuffer
 {
@@ -75,5 +90,3 @@ struct GameMemory
 
 // Recieves controller/keyboard input, bitmap buffer and sound buffer to use, and time info.
 void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSoundOutputBuffer* soundBuffer, GameInput* input);
-
-// Services that the platform layer privde to the game.
