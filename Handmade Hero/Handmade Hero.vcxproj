@@ -74,15 +74,22 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);HANDMADE_INTERNAL=1;HANDMADE_SLOW=1</PreprocessorDefinitions>
     </ClCompile>
+    <Link>
+      <AdditionalOptions>-subsystem:windows,5.1 %(AdditionalOptions)</AdditionalOptions>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions);HANDMADE_SLOW=1;HANDMADE_INTERNAL=1</PreprocessorDefinitions>
+      <AdditionalOptions>/MT /WX /wd4201 /wd4100 /wd4189 /Od /Oi /GR- /EHa- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <Link />
+    <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>

@@ -9,8 +9,8 @@ internal void DrawWeirdGradient(GameOffscreenBuffer* buffer, int xOffset, int yO
 		pixel = (uint32*)row;
 		for (int x = 0; x < buffer->Width; x++)
 		{
-			uint8 blue = x + xOffset;
-			uint8 green = y + yOffset;
+			uint8 blue = (uint8)(x + yOffset);
+			uint8 green = (uint8)(y + xOffset);
 			*pixel++ = (uint32)((green << 8) | blue);
 		}
 		row += buffer->Pitch;
@@ -58,7 +58,7 @@ void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSo
 	if (input0.IsAnalog)
 	{
 		//use analog movement tuning
-		gameState->YOffset += (int)4.0f*(input0.EndX);
+		gameState->YOffset += (int)(4.0f*(input0.EndX));
 		gameState->ToneHz += 256 + (int)(128.0f*(input0.EndY));
 	}
 	else

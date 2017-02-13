@@ -65,11 +65,11 @@ internal void Win32LoadXInput()
 	HMODULE xInputLibrary = LoadLibraryA("xinput1_4.dll");
 	if (!xInputLibrary)
 	{
-		HMODULE xInputLibrary = LoadLibraryA("xinput9_1_0.dll");
+		xInputLibrary = LoadLibraryA("xinput9_1_0.dll");
 	}
 	if (!xInputLibrary)
 	{
-		HMODULE xInputLibrary = LoadLibraryA("xinput1_3.dll");
+		xInputLibrary = LoadLibraryA("xinput1_3.dll");
 	}
 	if (xInputLibrary)
 	{
@@ -93,7 +93,7 @@ DebugReadFileResult DEBUGPlatformReadEntireFile(char* fileName)
 		{
 			//We are neve going to read a file bigger than 4gigs.
 			uint32 fileSize32 = SafeTruncateUInt64(fileSize.QuadPart);
-			result.Content = VirtualAlloc(0, fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+			result.Content = VirtualAlloc(0, (SIZE_T)fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			if (result.Content)
 			{
 				DWORD bytesRead;
@@ -267,80 +267,7 @@ LRESULT CALLBACK MainWindowCallback(HWND window, UINT message
 	case WM_KEYUP:
 	case WM_KEYDOWN:
 	{
-		WPARAM vkCode = wParam;
-		bool wasDown = ((lParam & (1 << 30)) != 0);
-		bool isDown = ((lParam & (1 << 31)) == 0);
-		if (wasDown != isDown)
-		{
-			if (vkCode == VK_F4)
-			{
-				bool altDown = ((1 << 29) & lParam) != 0;
-				if (altDown)
-					GlobalRunning = false;
-			}
-			else if (vkCode == 'A')
-			{
-
-			}
-			else if (vkCode == 'S')
-			{
-
-			}
-			else if (vkCode == 'D')
-			{
-
-			}
-			else if (vkCode == 'Q')
-			{
-
-			}
-			else if (vkCode == 'W')
-			{
-
-			}
-			else if (vkCode == 'E')
-			{
-
-			}
-			else if (vkCode == VK_UP)
-			{
-				if (!wasDown)
-				{
-				}
-			}
-			else if (vkCode == VK_DOWN)
-			{
-				if (!wasDown)
-				{
-
-				}
-			}
-			else if (vkCode == VK_LEFT)
-			{
-
-			}
-			else if (vkCode == VK_RIGHT)
-			{
-
-			}
-			else if (vkCode == VK_ESCAPE)
-			{
-				OutputDebugString("ESC: ");
-				if (isDown)
-				{
-					OutputDebugString("IsDown");
-				}
-				if (wasDown)
-				{
-					OutputDebugString("WasDown");
-				}
-				OutputDebugString("\n");
-			}
-			else if (vkCode == VK_SPACE)
-			{
-
-			}
-		}
+		Assert("Keyboard input came through a non-dispatch message!");
 	}break;
 	case WM_CLOSE:
 	{
@@ -432,6 +359,99 @@ internal void Win32ProcessXInputDigitalButtons(WORD xInputButtonState, GameButto
 	newState->HalfTransitionCount = (oldState->EnddedDown != newState->EnddedDown) ? 1 : 0;
 }
 
+internal void Win32ProcessKeyboardMessage(GameButtonState* newState, bool32 isDown)
+{
+	newState->EnddedDown = isDown;
+	newState->HalfTransitionCount++;
+}
+
+internal void Win32ProcessPendingMessages(GameControllerInput* keyboardController)
+{
+	MSG message;
+	while (PeekMessage(&message, 0, 0, 0, PM_REMOVE))
+	{
+		switch (message.message)
+		{
+		case WM_QUIT:
+		{
+			GlobalRunning = false;
+		} break;
+		case WM_SYSKEYUP:
+		case WM_SYSKEYDOWN:
+		case WM_KEYUP:
+		case WM_KEYDOWN:
+		{
+			WPARAM vkCode = message.wParam;
+			bool wasDown = ((message.lParam & (1 << 30)) != 0);
+			bool isDown = ((message.lParam & (1 << 31)) == 0);
+			if (wasDown != isDown)
+			{
+				if (vkCode == VK_F4)
+				{
+					bool altDown = ((1 << 29) & message.lParam) != 0;
+					if (altDown)
+						GlobalRunning = false;
+				}
+				else if (vkCode == 'A')
+				{
+
+				}
+				else if (vkCode == 'S')
+				{
+
+				}
+				else if (vkCode == 'D')
+				{
+
+				}
+				else if (vkCode == 'Q')
+				{
+
+				}
+				else if (vkCode == 'W')
+				{
+					Win32ProcessKeyboardMessage(&keyboardController->LeftShoulder, isDown);
+				}
+				else if (vkCode == 'E')
+				{
+					Win32ProcessKeyboardMessage(&keyboardController->RightShoulder, isDown);
+				}
+				else if (vkCode == VK_UP)
+				{
+					Win32ProcessKeyboardMessage(&keyboardController->Up, isDown);
+				}
+				else if (vkCode == VK_DOWN)
+				{
+					Win32ProcessKeyboardMessage(&keyboardController->Down, isDown);
+				}
+				else if (vkCode == VK_LEFT)
+				{
+					Win32ProcessKeyboardMessage(&keyboardController->Left, isDown);
+				}
+				else if (vkCode == VK_RIGHT)
+				{
+					Win32ProcessKeyboardMessage(&keyboardController->Right, isDown);
+				}
+				else if (vkCode == VK_ESCAPE)
+				{
+					GlobalRunning = false;
+				}
+				else if (vkCode == VK_SPACE)
+				{
+
+				}
+			}
+		} break;
+		default:
+		{
+			TranslateMessage(&message);
+			DispatchMessage(&message);
+		} break;
+		}
+	}
+}
+
+
 int CALLBACK WinMain(
 	HINSTANCE hInstance,
 	HINSTANCE hPrevInstance,
@@ -483,7 +503,7 @@ int CALLBACK WinMain(
 			gameMemory.PermenantStorageSize = Megabytes(64);
 			gameMemory.TransientStorageSize = Gigabytes(1);
 			uint64 totalSize = gameMemory.PermenantStorageSize + gameMemory.TransientStorageSize;
-			gameMemory.PermenantStorage = VirtualAlloc(baseAddress, totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+			gameMemory.PermenantStorage = VirtualAlloc(baseAddress, (SIZE_T)totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 			gameMemory.TransientStorage = (uint8*)gameMemory.PermenantStorage + gameMemory.PermenantStorageSize;
 
 			if (gameMemory.PermenantStorage && gameMemory.TransientStorage && soundSamples)
@@ -498,18 +518,12 @@ int CALLBACK WinMain(
 				uint64 lastCycleCount = __rdtsc();
 				while (GlobalRunning)
 				{
-					MSG message; //define it inside the loop, it will not make any difference to the compiler 
-								 // + u get the benefit of not beign able to mistakenly reference it outside the loop.
-								 //Unless of course the type is a class that has a destructor that u dont want to be called at
-								 // every iteration.
-					while (PeekMessage(&message, 0, 0, 0, PM_REMOVE))
-					{
-						if (message.message == WM_QUIT)
-							GlobalRunning = false;
-						TranslateMessage(&message);
-						DispatchMessage(&message);
-					}
-					int maxControllerCount = XUSER_MAX_COUNT;
+					GameControllerInput* keyboardController = &newInput->Controllers[0];
+					GameControllerInput zeroController = {};
+					*keyboardController = zeroController;
+					Win32ProcessPendingMessages(keyboardController);
+					
+					DWORD maxControllerCount = XUSER_MAX_COUNT;
 					if (maxControllerCount > ArrayCount(newInput->Controllers))
 					{
 						maxControllerCount = ArrayCount(newInput->Controllers);
