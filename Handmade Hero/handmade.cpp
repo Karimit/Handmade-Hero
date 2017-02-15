@@ -9,8 +9,8 @@ internal void DrawWeirdGradient(GameOffscreenBuffer* buffer, int xOffset, int yO
 		pixel = (uint32*)row;
 		for (int x = 0; x < buffer->Width; x++)
 		{
-			uint8 blue = (uint8)(x + yOffset);
-			uint8 green = (uint8)(y + xOffset);
+			uint8 blue = (uint8)(x + xOffset);
+			uint8 green = (uint8)(y + yOffset);
 			*pixel++ = (uint32)((green << 8) | blue);
 		}
 		row += buffer->Pitch;
@@ -36,10 +36,14 @@ internal void GameOutputSound (GameSoundOutputBuffer* soundBuffer, int toneHz)
 
 void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSoundOutputBuffer* soundBuffer,
 						 GameInput* input)
-{
+{	
+	GameButtonState* terminator = &(input->Controllers[0].Terminator);
+	Assert(terminator - &(input->Controllers[0].
+		Buttons[0]) == ArrayCount(input->Controllers[0].Buttons));
+	
+
 	GameState* gameState = (GameState*)memory->PermenantStorage;
 	Assert(sizeof(gameState) <= memory->PermenantStorageSize);
-
 	char* fileName = __FILE__;
 	DebugReadFileResult file = DEBUGPlatformReadEntireFile(fileName);
 	if (file.Content)
@@ -54,21 +58,32 @@ void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSo
 
 		memory->IsInitialized = true;
 	}
-	GameControllerInput input0 = input->Controllers[0];
-	if (input0.IsAnalog)
+
+	for (int controllerIndex = 0; controllerIndex < ArrayCount(input->Controllers); controllerIndex++)
 	{
-		//use analog movement tuning
-		gameState->YOffset += (int)(4.0f*(input0.EndX));
-		gameState->ToneHz += 256 + (int)(128.0f*(input0.EndY));
+		GameControllerInput* controller = GetController(input, controllerIndex);
+		if (controller->IsAnalog)
+		{
+			//use analog movement tuning
+			gameState->YOffset += (int)(4.0f*(controller->StickAverageX));
+			gameState->ToneHz += 256 + (int)(128.0f*(controller->StickAverageY));
+		}
+		else
+		{
+			if (controller->MoveLeft.EnddedDown)
+			{
+				gameState->XOffset -= 1;
+			}
+			if (controller->MoveRight.EnddedDown)
+			{
+				gameState->XOffset += 1;
+			}
+		}
+		if (controller->ActionUp.EnddedDown)
+		{
+			gameState->YOffset++;
+		}	
 	}
-	else
-	{
-		//use digital movement tuning
-	}
-	if (input0.Down.EnddedDown)
-	{
-		gameState->XOffset++;
-	}	
 
 	GameOutputSound(soundBuffer, gameState->ToneHz);
 	DrawWeirdGradient(buffer, gameState->XOffset, gameState->YOffset);
