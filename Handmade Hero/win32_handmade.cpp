@@ -30,6 +30,7 @@ global_variable bool GlobalRunning;
 global_variable Win32OffscreenBuffer GlobalBackbuffer;
 global_variable LPDIRECTSOUNDBUFFER GlobalSoundBuffer; // The actual sound buffer that we will write to.
 global_variable Win32SoundOutput GlobalSoundOutput;
+global_variable int64 GlobalPerfCountFrequency;
 
 //Support for xInputGetState and xInputSetState without having to reference xinput.dll because
 // many windows installations (especially win 7) doesnt have it by default
@@ -473,6 +474,20 @@ internal real32 Win32ProcessXInputStickValue(SHORT thumbValue, int deadZoneThres
 	return result;
 }
 
+inline LARGE_INTEGER Win32GetWallClock()
+{
+	LARGE_INTEGER result;
+	QueryPerformanceCounter(&result);
+	return result;
+
+}
+
+inline real32 Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+{
+	real32  secondsElapsedForWork = ((real32)(end.QuadPart - start.QuadPart) /
+									 (real32)GlobalPerfCountFrequency);
+	return secondsElapsedForWork;
+}
 
 int CALLBACK WinMain(
 	HINSTANCE hInstance,
@@ -483,7 +498,11 @@ int CALLBACK WinMain(
 {
 	LARGE_INTEGER perfFrequencyResult;
 	QueryPerformanceFrequency(&perfFrequencyResult);
-	int64 perfCountFrequency = perfFrequencyResult.QuadPart;
+	GlobalPerfCountFrequency = perfFrequencyResult.QuadPart;
+
+	// Set the windows scheduler granularity to 1ms so that our sleep can be more granular.
+	uint32 desiredSchudlerMs = 1;
+	bool32 sleepIsGranular = timeBeginPeriod(desiredSchudlerMs) == TIMERR_NOERROR;
 
 	Win32LoadXInput();
 	Win32ResizeDIBSection(&GlobalBackbuffer, 1280, 720);
@@ -493,6 +512,10 @@ int CALLBACK WinMain(
 	windowClass.lpfnWndProc = MainWindowCallback;//callback from windows when our window needs to do somwthing
 	windowClass.hInstance = hInstance;
 	windowClass.lpszClassName = "HandmadeHeroWindowClass";
+
+	int monitorRefreshHz = 60;
+	int gameUpdateHz = monitorRefreshHz / 2;
+	real32 targetSecondsPerFrame = 1.0f / (real32)gameUpdateHz;
 
 	if (RegisterClass(&windowClass))
 	{
@@ -534,8 +557,7 @@ int CALLBACK WinMain(
 				GameInput* oldInput = &input[0];
 				GameInput* newInput = &input[1];
 
-				LARGE_INTEGER lastCounter;
-				QueryPerformanceCounter(&lastCounter);
+				LARGE_INTEGER lastCounter = Win32GetWallClock();
 
 				uint64 lastCycleCount = __rdtsc();
 				while (GlobalRunning)
@@ -682,33 +704,58 @@ int CALLBACK WinMain(
 						Win32FillSoundBuffer(&GlobalSoundOutput, byteToLock, bytesToWrite, &soundBuffer);
 					}
 
+
+
+					LARGE_INTEGER workCounter = Win32GetWallClock();					
+					real32 workSecondsElapsed = Win32GetSecondsElapsed(lastCounter, workCounter);
+
+					real32 secondsElapsedForFrame = workSecondsElapsed;
+					if (secondsElapsedForFrame < targetSecondsPerFrame)
+					{
+						if(sleepIsGranular)
+						{
+							DWORD sleepMs = (DWORD)(1000.0f * (targetSecondsPerFrame - secondsElapsedForFrame));
+							if(sleepMs > 0)
+								Sleep(sleepMs);
+							/*Assert(Win32GetSecondsElapsed(lastCounter,
+								Win32GetWallClock()) > targetSecondsPerFrame);*/
+						}
+						while (secondsElapsedForFrame < targetSecondsPerFrame)
+						{
+							secondsElapsedForFrame = Win32GetSecondsElapsed(lastCounter,
+								Win32GetWallClock());
+						}
+					}
+					else
+					{
+						// TODO: Log miss of frame rate.
+					}
+					
 					Win32WindowDimension windowDimension = Win32GetWindowDimension(window);
 					Win32DisplayBufferInWindow(deviceContext, &GlobalBackbuffer, windowDimension.Width, windowDimension.Height);
 
-					uint64 endCycleCount = __rdtsc();
-					int64 cyclesElapsed = endCycleCount - lastCycleCount;
-
-					LARGE_INTEGER endCounter;
-					QueryPerformanceCounter(&endCounter);
-
-					int64 counterElapsed = endCounter.QuadPart - lastCounter.QuadPart;
-					real32 msPerFrame = ((1000.f * (real32)counterElapsed) / (real32)perfCountFrequency);
-					real32 fps = (real32)perfCountFrequency / counterElapsed;
-					real32 megaCyclesPerFrame = (real32)(cyclesElapsed / (1000 * 1000));
-
-#if 0
-					char buffer[256];
-					sprintf_s(buffer, "%fmsf, %ffps, %fmcpf\n",
-						msPerFrame, fps, megaCyclesPerFrame);
-					OutputDebugString(buffer);
-#endif // 0
-
-					lastCounter = endCounter;
-					lastCycleCount = endCycleCount;
 					
 					GameInput* temp = newInput;
 					newInput = oldInput;
 					oldInput = temp;
+
+					LARGE_INTEGER endCounter = Win32GetWallClock();
+					real32 msPerFrame = (1000.f * Win32GetSecondsElapsed(lastCounter, endCounter));
+					real32 fps = 0.0f;
+					lastCounter = endCounter;
+					
+					uint64 endCycleCount = __rdtsc();
+					int64 cyclesElapsed = endCycleCount - lastCycleCount;
+					lastCycleCount = endCycleCount;
+					real32 megaCyclesPerFrame = (real32)(cyclesElapsed / (1000 * 1000));
+
+
+
+					char stringBuffer[256];
+					sprintf_s(stringBuffer, "%fmsf, %ffps, %fmcpf\n",
+						msPerFrame, fps, megaCyclesPerFrame);
+					OutputDebugString(stringBuffer);
+					
 				}
 
 				//We specified CS_OWNDC => we are telling windows that we want our own DC that we wont have to return to DC pool
