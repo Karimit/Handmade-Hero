@@ -31,10 +31,14 @@ internal void GameOutputSound (GameSoundOutputBuffer* soundBuffer, int toneHz)
 		*sampleOut++ = sampleValue;
 		*sampleOut++ = sampleValue;
 		tSine += (2.0f * PI32) / (real32)wavePeriod;
+		if (tSine > (2.0f * PI32))
+		{
+			tSine -= (2.0f * PI32);
+		}
 	}
 }
 
-void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSoundOutputBuffer* soundBuffer,
+void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer,
 						 GameInput* input)
 {	
 	GameButtonState* terminator = &(input->Controllers[0].Terminator);
@@ -82,9 +86,24 @@ void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSo
 		if (controller->ActionUp.EnddedDown)
 		{
 			gameState->YOffset++;
-		}	
+			gameState->ToneHz += 64;
+		}
+		if (controller->ActionDown.EnddedDown)
+		{
+			gameState->ToneHz -= 64;
+			if (gameState->ToneHz <= 0)
+			{
+				gameState->ToneHz = 1;
+			}
+		}
 	}
 
-	GameOutputSound(soundBuffer, gameState->ToneHz);
 	DrawWeirdGradient(buffer, gameState->XOffset, gameState->YOffset);
+}
+
+void GameGetSoundSamples(GameMemory* memory, GameSoundOutputBuffer* soundBuffer)
+{
+	GameState* gameState = (GameState*)memory->PermenantStorage;
+	
+	GameOutputSound(soundBuffer, gameState->ToneHz);
 }

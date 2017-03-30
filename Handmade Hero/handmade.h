@@ -101,4 +101,9 @@ struct GameMemory
 };
 
 // Recieves controller/keyboard input, bitmap buffer and sound buffer to use, and time info.
-void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameSoundOutputBuffer* soundBuffer, GameInput* input);
+void GameUpdateAndRender(GameMemory* memory, GameOffscreenBuffer* buffer, GameInput* input);
+
+// NOTE: this has to be really fast (< 1ms) or else play and write cursors
+// before calling it will be different than play and write cursors after
+// calling it.
+void GameGetSoundSamples(GameMemory* memory, GameSoundOutputBuffer* soundBuffer);

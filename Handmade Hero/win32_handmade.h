@@ -6,6 +6,7 @@ struct Win32OffscreenBuffer
 	BITMAPINFO Info;
 	void* Memory;
 	int Pitch;
+	int BytesPerPixel;
 };
 
 struct Win32SoundOutput
@@ -13,13 +14,26 @@ struct Win32SoundOutput
 	int SamplesPerSecond;
 	int BytesPerSample;
 	uint32 RunningSampleIndex;
-	int SoundBufferSize;
+	DWORD SoundBufferSize;
 	real32 TSine;
-	int LatencySampleCount;
+	DWORD SafetyBytes;
 };
 
 struct Win32WindowDimension
 {
 	int Width;
 	int Height;
+};
+
+struct Win32DebugTimeMarker
+{
+	DWORD OutputPlayCursor;
+	DWORD OutputWriteCursor;
+
+	DWORD OutputLocation; //bytetolock
+	DWORD OutputByteCount;
+
+	DWORD ExpectedFlipPlayCursor;
+	DWORD FlipPlayCursor;
+	DWORD FlipWriteCursor;
 };
